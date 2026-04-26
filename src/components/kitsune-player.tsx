@@ -8,7 +8,7 @@ import React, {
   HTMLAttributes,
 } from "react";
 import Artplayer from "artplayer";
-import type { Option } from "artplayer/types/option";
+import type { Option } from "artplayer";
 import Hls from "hls.js";
 
 // Helper functions and types (keep or import from your types file)
@@ -89,6 +89,8 @@ function KitsunePlayer({
     setIsAutoSkipEnabled(autoSkip);
   }, [autoSkip]);
 
+  const proxyBaseURI = `${env("NEXT_PUBLIC_PROXY_URL")}/m3u8-proxy`;
+
   // --- Construct Proxy URI ---
   const uri = useMemo(() => {
     const firstSourceUrl = episodeInfo?.sources?.[0]?.url;
@@ -96,9 +98,8 @@ function KitsunePlayer({
     if (!firstSourceUrl || !referer) return null;
 
     try {
-      const baseURI = `${env("NEXT_PUBLIC_PROXY_URL")}/m3u8-proxy`;
       const url = encodeURIComponent(firstSourceUrl);
-      return `${baseURI}?url=${url}&referer=${referer}`;
+      return `${proxyBaseURI}?url=${url}&referer=${referer}`;
     } catch (error) {
       console.error("Error constructing proxy URI:", error);
       return null;
@@ -241,24 +242,30 @@ function KitsunePlayer({
     skipTimesRef.current.outroEnd = outroEnd; // Store the raw value
 
     // Subtitle Track Selector Options
-    const trackOptions: any = (episodeInfo?.tracks ?? []).map((track) => ({
+    const trackOptions: any = (episodeInfo?.subtitles ?? []).map((track) => ({
       default: track.lang === "English", // Example default logic
       html: track.lang,
-      url: track.url,
+      url: `${proxyBaseURI}?url=${encodeURIComponent(track.url)}`,
     }));
+
+    const defaultTrack = episodeInfo?.subtitles?.find(
+      (track) => track.lang === "English",
+    )?.url;
 
     // Direct Subtitle Option based on subOrDub
     const subtitleConfig: Option["subtitle"] =
       subOrDub === "sub"
         ? {
-          url: episodeInfo?.tracks?.find((track) => track.lang === "English")
-            ?.url,
+          url: `${defaultTrack
+              ? `${proxyBaseURI}?url=${encodeURIComponent(defaultTrack)}`
+              : ""
+            }`,
           type: "vtt",
           style: {
             // Example styles
             color: "#FFFFFF",
             fontSize: "22px", // Base size, will be adjusted
-            textShadow: "1px 1px 3px rgba(0,0,0,0.8)",
+            textShadow: "2px 2px 4px rgba(0,0,0,0.8)",
           },
           encoding: "utf-8",
           escape: false, // Allow potential styling tags in VTT
@@ -420,7 +427,9 @@ function KitsunePlayer({
           onSelect: function(item: any) {
             // Type the item
             if (item.url && typeof item.url === "string") {
-              art.subtitle.switch(item.url, { name: item.html });
+              art.subtitle.switch(`${proxyBaseURI}?url=${item.url}`, {
+                name: item.html,
+              });
               return item.html ?? "Subtitle";
             }
             return item.html ?? "Subtitle"; // Return name for display
@@ -514,7 +523,7 @@ function KitsunePlayer({
         // Auto Skip Logic
         if (manualSkip?.style?.display !== "none") {
           // Ensure manual button is hidden
-          if (manualSkip.style) manualSkip.style.display = "none";
+          if (manualSkip?.style) manualSkip.style.display = "none";
         }
         if (inIntro && typeof introEnd === "number") {
           art.seek = introEnd;
